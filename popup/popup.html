@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <h1>Chess Assistant</h1>
+      <label class="switch">
+        <input type="checkbox" id="enabled">
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <section class="group">
+      <h2>Sites</h2>
+      <label class="row"><input type="checkbox" id="site-chesscom"> chess.com</label>
+      <label class="row"><input type="checkbox" id="site-lichess"> lichess.org</label>
+    </section>
+
+    <section class="group">
+      <h2>Engine strength</h2>
+      <label class="row">
+        <span>ELO <span id="elo-value">2400</span></span>
+        <input type="range" id="elo" min="1320" max="3190" step="10">
+      </label>
+      <label class="row"><input type="checkbox" id="unlimited"> Unlimited (full strength)</label>
+      <div class="row segmented">
+        <label><input type="radio" name="mode" value="time"> Time</label>
+        <label><input type="radio" name="mode" value="depth"> Depth</label>
+      </div>
+      <label class="row" id="time-row">
+        <span>Time per move <span id="time-value">1000</span> ms</span>
+        <input type="range" id="time" min="100" max="10000" step="100">
+      </label>
+      <label class="row" id="depth-row">
+        <span>Depth <span id="depth-value">18</span></span>
+        <input type="range" id="depth" min="5" max="25" step="1">
+      </label>
+    </section>
+
+    <section class="group">
+      <h2>Trigger</h2>
+      <div class="row segmented">
+        <label><input type="radio" name="trigger" value="auto"> Auto</label>
+        <label><input type="radio" name="trigger" value="myTurn"> My turn</label>
+        <label><input type="radio" name="trigger" value="hotkey"> Hotkey only</label>
+      </div>
+      <label class="row">
+        <span>Hotkey</span>
+        <button id="hotkey-btn" type="button">Alt+A</button>
+      </label>
+    </section>
+
+    <section class="group">
+      <h2>Display</h2>
+      <label class="row"><input type="checkbox" id="show-arrow"> Show arrow</label>
+      <label class="row"><input type="checkbox" id="show-panel"> Show panel</label>
+      <label class="row"><input type="checkbox" id="show-evalbar"> Show eval bar</label>
+      <label class="row"><input type="checkbox" id="show-pvlines"> Show PV lines</label>
+    </section>
+
+    <footer class="popup-footer">
+      <button id="reset" type="button">Reset to defaults</button>
+    </footer>
+  </div>
+
+  <script src="../vendor/browser-polyfill.min.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
