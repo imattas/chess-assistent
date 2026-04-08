@@ -1,0 +1,77 @@
+{
+  "manifest_version": 3,
+  "name": "Chess Assistant",
+  "version": "0.1.0",
+  "description": "Local Stockfish overlay for chess.com and lichess. No automove.",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://*.chess.com/*",
+    "https://lichess.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.chess.com/*",
+        "https://lichess.org/*"
+      ],
+      "js": [
+        "vendor/browser-polyfill.min.js",
+        "vendor/chess.min.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/overlay/overlay.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "engine/stockfish-nnue-16-single.js",
+        "engine/stockfish-nnue-16-single.wasm",
+        "engine/nn-5af11540bbfe.nnue",
+        "content/adapters/chesscom.js",
+        "content/adapters/lichess.js",
+        "content/board-watcher.js",
+        "content/fen-replay.js",
+        "content/settings.js",
+        "content/hotkeys.js",
+        "content/overlay/arrow.js",
+        "content/overlay/panel.js",
+        "engine/engine-bridge.js"
+      ],
+      "matches": [
+        "https://*.chess.com/*",
+        "https://lichess.org/*"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chess-assistant@imattas.local",
+      "strict_min_version": "115.0"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
