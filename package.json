@@ -1,0 +1,14 @@
+{
+  "name": "chess-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "build": "bash scripts/build.sh"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "chess.js": "^1.0.0"
+  }
+}
