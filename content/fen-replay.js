@@ -11,6 +11,32 @@
 export const STARTING_FEN =
   'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+// Cheap structural FEN validity check. Catches the kingless / partial-scrape
+// FENs that would crash Stockfish 16 NNUE with index-out-of-bounds. Not a
+// legality check — just enough to prevent us from feeding garbage to the
+// engine.
+export function isValidFen(fen) {
+  if (typeof fen !== 'string') return false;
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length < 4) return false;
+  const board = parts[0];
+  if (!board.includes('K') || !board.includes('k')) return false;
+  const ranks = board.split('/');
+  if (ranks.length !== 8) return false;
+  // Each rank's character widths must sum to 8.
+  for (const rank of ranks) {
+    let width = 0;
+    for (const ch of rank) {
+      if (/[1-8]/.test(ch)) width += parseInt(ch, 10);
+      else if (/[prnbqkPRNBQK]/.test(ch)) width += 1;
+      else return false;
+    }
+    if (width !== 8) return false;
+  }
+  if (parts[1] !== 'w' && parts[1] !== 'b') return false;
+  return true;
+}
+
 function ensureChess() {
   if (typeof globalThis.Chess === 'function') return globalThis.Chess;
   throw new Error(

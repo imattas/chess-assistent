@@ -122,6 +122,13 @@ export function createAdapter(rootDoc = document) {
       placed++;
     }
     if (placed === 0) return null;
+    // Validation: a legal chess position must contain both kings. Reject
+    // partial scrapes so the watcher falls through to SAN replay.
+    const flat = grid.flat();
+    if (!flat.includes('K') || !flat.includes('k')) {
+      console.warn('[chess-assistant:chesscom] piece grid missing king(s) — rejecting');
+      return null;
+    }
     return grid;
   }
 

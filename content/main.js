@@ -11,7 +11,7 @@ import { createWatcher } from './board-watcher.js';
 import { createEngineBridge } from '../engine/engine-bridge.js';
 import { createArrowLayer } from './overlay/arrow.js';
 import { createPanel } from './overlay/panel.js';
-import { uciToSan } from './fen-replay.js';
+import { uciToSan, isValidFen } from './fen-replay.js';
 import { installHotkey } from './hotkeys.js';
 
 const TAG = '[chess-assistant]';
@@ -89,32 +89,58 @@ export async function run() {
     return;
   }
 
-  // Spin up the engine worker
+  // Engine bootstrap. We wrap it in a function so we can re-spawn the worker
+  // if Stockfish crashes (e.g. fed an invalid FEN that causes the wasm to
+  // throw index-out-of-bounds — once that happens the engine is unusable
+  // for the rest of the session and we have to start a new one).
+  let bridge;
   let worker;
-  try {
-    worker = await createEngineWorker();
-  } catch (e) {
-    error('failed to create engine worker:', e);
-    return;
-  }
-  worker.onerror = (e) => error('engine worker error:', e.message || e);
+  let restartingEngine = false;
 
-  const bridge = createEngineBridge(worker);
-  log('engine bridge created, waiting for ready');
-  try {
+  async function startEngine() {
+    try {
+      worker = await createEngineWorker();
+    } catch (e) {
+      error('failed to create engine worker:', e);
+      throw e;
+    }
+    worker.onerror = (e) => {
+      error('engine worker error:', e.message || e);
+      // Auto-restart on crash, but only once at a time.
+      if (restartingEngine) return;
+      restartingEngine = true;
+      setTimeout(async () => {
+        warn('restarting engine worker after crash');
+        try {
+          if (bridge) bridge.destroy?.();
+        } catch {}
+        try {
+          await startEngine();
+          warn('engine restarted');
+        } catch (err) {
+          error('engine restart failed:', err);
+        } finally {
+          restartingEngine = false;
+        }
+      }, 100);
+    };
+    bridge = createEngineBridge(worker);
+    log('engine bridge created, waiting for ready');
     await bridge.ready();
     log('engine ready');
-  } catch (e) {
-    error('engine never became ready:', e);
-    return;
+    await bridge.setOptions({
+      elo: settings.engine.elo,
+      limitStrength: settings.engine.limitStrength,
+      threads: 1,
+      hash: 16
+    });
   }
 
-  await bridge.setOptions({
-    elo: settings.engine.elo,
-    limitStrength: settings.engine.limitStrength,
-    threads: 1,
-    hash: 16
-  });
+  try {
+    await startEngine();
+  } catch (e) {
+    return;
+  }
 
   // Create overlay layers
   const arrow = createArrowLayer();
@@ -139,6 +165,18 @@ export async function run() {
   let lastOrientation = 'white';
 
   async function analyzePosition(fen, sideToMove, orientation) {
+    // Sanity-check the FEN before sending to Stockfish. Bad FENs (kingless,
+    // wrong rank widths) crash the wasm with index-out-of-bounds and the
+    // engine is unusable for the rest of the session.
+    if (!isValidFen(fen)) {
+      warn('skipping analyze: FEN failed validity check:', fen);
+      return;
+    }
+    if (!bridge) {
+      warn('skipping analyze: engine not ready');
+      return;
+    }
+
     // Re-query the board on every analyze so SPA-driven element replacement
     // (e.g. chess.com new-game transitions) doesn't leave us drawing onto a
     // detached node.

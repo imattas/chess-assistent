@@ -68,6 +68,8 @@ export function createAdapter(rootDoc = document) {
     return null;
   }
 
+  let pieceSampleLogged = false;
+
   function readPieceGrid() {
     const board = getBoardElement();
     if (!board) return null;
@@ -77,39 +79,62 @@ export function createAdapter(rootDoc = document) {
     if (pieces.length === 0) pieces = board.querySelectorAll('cg-piece');
     if (pieces.length === 0) pieces = board.querySelectorAll('.piece');
     if (pieces.length === 0) return null;
-    const rect = board.getBoundingClientRect();
-    if (rect.width <= 0) return null;
-    const sq = rect.width / 8;
+
+    const boardRect = board.getBoundingClientRect();
+    if (boardRect.width <= 0) return null;
+    const sq = boardRect.width / 8;
     const orientation = getOrientation();
+
+    // First-call diagnostic: log how many pieces were found and a sample
+    // outerHTML so we can debug DOM regressions from a single console paste.
+    if (!pieceSampleLogged) {
+      pieceSampleLogged = true;
+      try {
+        const sample = pieces[0]?.outerHTML?.slice(0, 200);
+        console.log(
+          '[chess-assistant:lichess] readPieceGrid first call:',
+          `${pieces.length} pieces found, sample:`,
+          sample
+        );
+      } catch {}
+    }
 
     const grid = Array.from({ length: 8 }, () => Array(8).fill(null));
     let placed = 0;
+    let skippedNoColor = 0;
+    let skippedNoPiece = 0;
+    let skippedOutOfBounds = 0;
+
     for (const p of pieces) {
-      const cls = (p.className || '').toLowerCase();
+      // Use classList to handle both HTMLElement and SVGElement.
+      const classes = Array.from(p.classList || []).map(c => c.toLowerCase());
+      const classStr = classes.join(' ');
+
       let color = null;
-      if (cls.includes('white')) color = 'w';
-      else if (cls.includes('black')) color = 'b';
-      if (!color) continue;
+      if (classStr.includes('white')) color = 'w';
+      else if (classStr.includes('black')) color = 'b';
+      if (!color) { skippedNoColor++; continue; }
+
       let pieceLetter = null;
       for (const name of Object.keys(PIECE_NAMES)) {
-        if (cls.includes(name)) { pieceLetter = PIECE_NAMES[name]; break; }
+        if (classStr.includes(name)) { pieceLetter = PIECE_NAMES[name]; break; }
       }
-      if (!pieceLetter) continue;
+      if (!pieceLetter) { skippedNoPiece++; continue; }
       const letter = color === 'w' ? pieceLetter.toUpperCase() : pieceLetter;
 
-      // Position via inline transform. chessground uses translate(Xpx,Ypx)
-      // historically and translate3d(Xpx,Ypx,0) on some builds.
-      const style = p.getAttribute('style') || '';
-      let m = style.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
-      if (!m) m = style.match(/translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
-      if (!m) continue;
-      const x = parseFloat(m[1]);
-      const y = parseFloat(m[2]);
-      // chessground places (0,0) at the orientation-relative top-left
-      // corner. For white-at-bottom: x=0 → file a, y=0 → rank 8.
-      let file = Math.round(x / sq);
-      let row = Math.round(y / sq); // 0 = top
-      if (file < 0 || file > 7 || row < 0 || row > 7) continue;
+      // Use the actual rendered bounding rect rather than parsing inline
+      // transforms. Works regardless of whether chessground uses translate,
+      // translate3d, top/left, or any other positioning method.
+      const r = p.getBoundingClientRect();
+      if (r.width <= 0) { skippedOutOfBounds++; continue; }
+      const cx = r.left + r.width / 2 - boardRect.left;
+      const cy = r.top + r.height / 2 - boardRect.top;
+      let file = Math.floor(cx / sq);
+      let row = Math.floor(cy / sq);
+      if (file < 0 || file > 7 || row < 0 || row > 7) {
+        skippedOutOfBounds++;
+        continue;
+      }
       if (orientation === 'black') {
         file = 7 - file;
         row = 7 - row;
@@ -117,7 +142,23 @@ export function createAdapter(rootDoc = document) {
       grid[row][file] = letter;
       placed++;
     }
+
     if (placed === 0) return null;
+
+    // Validation: a legal chess position must contain both kings. Without
+    // this check we hand kingless FENs to chess.js (which throws) and to
+    // Stockfish (which crashes the wasm with index-out-of-bounds, ruining
+    // the engine for the rest of the session).
+    const flat = grid.flat();
+    if (!flat.includes('K') || !flat.includes('k')) {
+      console.warn(
+        '[chess-assistant:lichess] piece grid missing king(s)',
+        `(placed=${placed}, skippedNoColor=${skippedNoColor},`,
+        `skippedNoPiece=${skippedNoPiece}, skippedOutOfBounds=${skippedOutOfBounds})`,
+        '— rejecting and falling back to next strategy'
+      );
+      return null;
+    }
     return grid;
   }
 
