@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Chess Assistant",
-  "version": "0.1.0",
-  "description": "Local Stockfish overlay for chess.com and lichess. No automove.",
+  "version": "0.2.0",
+  "description": "Local Stockfish overlay for chess.com, lichess, chess24, chesstempo, and more. No automove.",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",
@@ -24,13 +24,17 @@
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*.chess.com/*",
-    "https://lichess.org/*"
+    "https://lichess.org/*",
+    "https://*.chess24.com/*",
+    "https://*.chesstempo.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "https://*.chess.com/*",
-        "https://lichess.org/*"
+        "https://lichess.org/*",
+        "https://*.chess24.com/*",
+        "https://*.chesstempo.com/*"
       ],
       "js": [
         "vendor/browser-polyfill.min.js",
@@ -52,6 +56,7 @@
         "content/main.js",
         "content/adapters/chesscom.js",
         "content/adapters/lichess.js",
+        "content/adapters/generic.js",
         "content/board-watcher.js",
         "content/fen-replay.js",
         "content/settings.js",
@@ -62,7 +67,9 @@
       ],
       "matches": [
         "https://*.chess.com/*",
-        "https://lichess.org/*"
+        "https://lichess.org/*",
+        "https://*.chess24.com/*",
+        "https://*.chesstempo.com/*"
       ]
     }
   ],

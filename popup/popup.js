@@ -32,10 +32,6 @@ async function render() {
   const s = await loadSettings();
 
   bindCheckbox('enabled', () => s.enabled, async v => { await saveSettings({ enabled: v }); });
-  bindCheckbox('site-chesscom', () => s.sites.chesscom, async v =>
-    saveSettings({ sites: { ...s.sites, chesscom: v } }));
-  bindCheckbox('site-lichess', () => s.sites.lichess, async v =>
-    saveSettings({ sites: { ...s.sites, lichess: v } }));
 
   bindRange('elo', 'elo-value', () => s.engine.elo, async v =>
     saveSettings({ engine: { ...s.engine, elo: v } }));
@@ -51,8 +47,6 @@ async function render() {
 
   bindRange('depth', 'depth-value', () => s.engine.depth, async v =>
     saveSettings({ engine: { ...s.engine, depth: v } }));
-
-  bindRadio('trigger', () => s.trigger, async v => saveSettings({ trigger: v }));
 
   const hotkeyBtn = $('hotkey-btn');
   hotkeyBtn.textContent = s.hotkey;

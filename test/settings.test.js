@@ -61,8 +61,11 @@ test('subscribe fires on change', async () => {
 });
 
 test('defaults are valid', () => {
-  assert.equal(DEFAULT_SETTINGS.version, 1);
+  assert.equal(DEFAULT_SETTINGS.version, 2);
   assert.equal(DEFAULT_SETTINGS.enabled, true);
-  assert.equal(DEFAULT_SETTINGS.trigger, 'auto');
   assert.equal(DEFAULT_SETTINGS.hotkey, 'Alt+A');
+  // trigger and per-site toggles were removed in v2: analysis is always
+  // automatic on every move and the extension runs on every supported site.
+  assert.equal(DEFAULT_SETTINGS.trigger, undefined);
+  assert.equal(DEFAULT_SETTINGS.sites, undefined);
 });

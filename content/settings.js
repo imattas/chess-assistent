@@ -4,9 +4,8 @@
 // before this module by the manifest content_scripts entry).
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  version: 1,
+  version: 2,
   enabled: true,
-  sites: { chesscom: true, lichess: true },
   engine: {
     elo: 2400,
     limitStrength: true,
@@ -14,7 +13,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
     timeMs: 1000,
     depth: 18
   },
-  trigger: 'auto',    // 'auto' | 'myTurn' | 'hotkey'
   hotkey: 'Alt+A',
   display: {
     arrow: true,

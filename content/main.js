@@ -58,36 +58,28 @@ export async function run() {
   log('bootstrap starting on', location.host);
 
   const host = location.host;
-  let adapterModule;
+  let adapterFile;
   if (host.endsWith('chess.com')) {
-    log('loading chess.com adapter');
-    adapterModule = await import(browser.runtime.getURL('content/adapters/chesscom.js'));
+    adapterFile = 'content/adapters/chesscom.js';
   } else if (host.endsWith('lichess.org')) {
-    log('loading lichess adapter');
-    adapterModule = await import(browser.runtime.getURL('content/adapters/lichess.js'));
+    adapterFile = 'content/adapters/lichess.js';
   } else {
-    log('host not supported, exiting:', host);
-    return;
+    // chess24.com, chesstempo.com, and any other supported host fall through
+    // to the generic adapter, which uses broad selectors and bounding-rect
+    // piece scraping to handle arbitrary chess-board markup.
+    adapterFile = 'content/adapters/generic.js';
   }
+  log('loading adapter:', adapterFile);
+  const adapterModule = await import(browser.runtime.getURL(adapterFile));
 
   let settings = await loadSettings();
   log('settings loaded:', JSON.stringify({
     enabled: settings.enabled,
-    sites: settings.sites,
     elo: settings.engine.elo,
-    mode: settings.engine.mode,
-    trigger: settings.trigger
+    mode: settings.engine.mode
   }));
 
   if (!settings.enabled) { log('extension disabled in popup, exiting'); return; }
-  if (host.endsWith('chess.com') && !settings.sites.chesscom) {
-    log('chess.com disabled in popup, exiting');
-    return;
-  }
-  if (host.endsWith('lichess.org') && !settings.sites.lichess) {
-    log('lichess disabled in popup, exiting');
-    return;
-  }
 
   // Engine bootstrap. We wrap it in a function so we can re-spawn the worker
   // if Stockfish crashes (e.g. fed an invalid FEN that causes the wasm to
@@ -234,12 +226,8 @@ export async function run() {
     }
   }
 
-  function shouldAnalyze(sideToMove, orientation) {
-    if (settings.trigger === 'auto') return true;
-    if (settings.trigger === 'myTurn') return sideToMove === orientation;
-    return false; // hotkey-only
-  }
-
+  // Auto-analyze on every position change. The trigger setting was removed
+  // in v0.2.0; the hotkey is still available for manual re-analysis.
   const watcher = createWatcher(adapter, ({ fen, sideToMove, orientation, source }) => {
     log(`position changed (source=${source}, side=${sideToMove}, orient=${orientation})`);
     lastFen = fen;
@@ -247,11 +235,7 @@ export async function run() {
     lastOrientation = orientation;
     bridge.stop();
     arrow.clear();
-    if (shouldAnalyze(sideToMove, orientation)) {
-      analyzePosition(fen, sideToMove, orientation);
-    } else {
-      log(`skipping analyze due to trigger=${settings.trigger}`);
-    }
+    analyzePosition(fen, sideToMove, orientation);
   });
 
   // Hotkey: force a fresh re-read of the current board state (in case the
