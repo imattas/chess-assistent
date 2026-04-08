@@ -103,6 +103,14 @@ html, body {
 #hotkey-btn:hover, #reset:hover { border-color: var(--accent); }
 #hotkey-btn.capturing { background: var(--accent-dim); border-color: var(--accent); }
 
+.hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+.hint strong { color: var(--text); }
+
 .switch {
   position: relative;
   display: inline-block;

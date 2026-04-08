@@ -42,12 +42,13 @@
     </section>
 
     <section class="group">
-      <h2>Trigger</h2>
+      <h2>Trigger — when does the engine analyze?</h2>
       <div class="row segmented">
-        <label><input type="radio" name="trigger" value="auto"> Auto</label>
-        <label><input type="radio" name="trigger" value="myTurn"> My turn</label>
+        <label><input type="radio" name="trigger" value="auto"> Every move</label>
+        <label><input type="radio" name="trigger" value="myTurn"> Only my turn</label>
         <label><input type="radio" name="trigger" value="hotkey"> Hotkey only</label>
       </div>
+      <p class="hint">Pick <strong>Every move</strong> to see the arrow and eval update after both your moves <em>and</em> your opponent's.</p>
       <label class="row">
         <span>Hotkey</span>
         <button id="hotkey-btn" type="button">Alt+A</button>

@@ -199,12 +199,21 @@ export async function run() {
         },
         info => {
           if (!info.pv || info.pv.length === 0) return;
-          const uci = info.pv[0];
-          const from = uci.slice(0, 2);
-          const to = uci.slice(2, 4);
-          if (settings.display.arrow) arrow.setMove({ from, to }, orientation);
+          const primaryUci = info.pv[0];
+          const opponentUci = info.pv[1] || null;
+          const primary = {
+            from: primaryUci.slice(0, 2),
+            to: primaryUci.slice(2, 4)
+          };
+          const opponent = opponentUci ? {
+            from: opponentUci.slice(0, 2),
+            to: opponentUci.slice(2, 4)
+          } : null;
+          if (settings.display.arrow) {
+            arrow.setMoves({ primary, opponent }, orientation);
+          }
           if (settings.display.panel) {
-            const bestMoveSan = uciToSan(fen, uci);
+            const bestMoveSan = uciToSan(fen, primaryUci);
             const pvSans = info.pv.slice(0, 6).map(u => {
               try { return uciToSan(fen, u); } catch { return u; }
             });
