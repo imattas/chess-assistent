@@ -71,11 +71,16 @@ export function createAdapter(rootDoc = document) {
   function readPieceGrid() {
     const board = getBoardElement();
     if (!board) return null;
-    const pieces = board.querySelectorAll('piece');
+    // chessground uses <piece> elements; some forks/variants use <cg-piece>
+    // or div.piece. Try all of them.
+    let pieces = board.querySelectorAll('piece');
+    if (pieces.length === 0) pieces = board.querySelectorAll('cg-piece');
+    if (pieces.length === 0) pieces = board.querySelectorAll('.piece');
     if (pieces.length === 0) return null;
     const rect = board.getBoundingClientRect();
     if (rect.width <= 0) return null;
     const sq = rect.width / 8;
+    const orientation = getOrientation();
 
     const grid = Array.from({ length: 8 }, () => Array(8).fill(null));
     let placed = 0;
@@ -92,18 +97,19 @@ export function createAdapter(rootDoc = document) {
       if (!pieceLetter) continue;
       const letter = color === 'w' ? pieceLetter.toUpperCase() : pieceLetter;
 
-      // Position via inline transform: translate(Xpx, Ypx)
+      // Position via inline transform. chessground uses translate(Xpx,Ypx)
+      // historically and translate3d(Xpx,Ypx,0) on some builds.
       const style = p.getAttribute('style') || '';
-      const m = style.match(/translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/);
+      let m = style.match(/translate3d\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+      if (!m) m = style.match(/translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
       if (!m) continue;
       const x = parseFloat(m[1]);
       const y = parseFloat(m[2]);
-      // Lichess places (0,0) at the orientation-relative top-left corner.
-      // For white-at-bottom: file 0 (a) at x=0, rank 8 at y=0.
+      // chessground places (0,0) at the orientation-relative top-left
+      // corner. For white-at-bottom: x=0 → file a, y=0 → rank 8.
       let file = Math.round(x / sq);
       let row = Math.round(y / sq); // 0 = top
       if (file < 0 || file > 7 || row < 0 || row > 7) continue;
-      const orientation = getOrientation();
       if (orientation === 'black') {
         file = 7 - file;
         row = 7 - row;

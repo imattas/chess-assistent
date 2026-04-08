@@ -193,7 +193,7 @@ export async function run() {
     return false; // hotkey-only
   }
 
-  createWatcher(adapter, ({ fen, sideToMove, orientation, source }) => {
+  const watcher = createWatcher(adapter, ({ fen, sideToMove, orientation, source }) => {
     log(`position changed (source=${source}, side=${sideToMove}, orient=${orientation})`);
     lastFen = fen;
     lastSideToMove = sideToMove;
@@ -207,11 +207,47 @@ export async function run() {
     }
   });
 
-  // Hotkey: re-analyze on demand
+  // Hotkey: force a fresh re-read of the current board state (in case the
+  // watcher missed a mutation or the dedup short-circuited a stale FEN),
+  // then analyze whatever the watcher believes the current position is.
   installHotkey(() => settings.hotkey, () => {
-    log('hotkey pressed');
-    if (lastFen) analyzePosition(lastFen, lastSideToMove, lastOrientation);
+    log('hotkey pressed — forcing fresh read');
+    watcher.forceRead();
+    if (lastFen) {
+      analyzePosition(lastFen, lastSideToMove, lastOrientation);
+    } else {
+      warn('hotkey pressed but no position has been read yet');
+    }
   });
+
+  // One-shot diagnostic dump 1.5s after bootstrap. Gives us visibility into
+  // exactly what each adapter strategy returns on the user's current page
+  // type so DOM-shape regressions are debuggable from a single console
+  // paste.
+  setTimeout(() => {
+    try {
+      log('=== diagnostic dump ===');
+      log('host:', location.host, 'path:', location.pathname);
+      const board = adapter.getBoardElement();
+      log('board element present:', !!board, board ? `(${board.tagName.toLowerCase()})` : '');
+      log('orientation:', adapter.getOrientation());
+      const attrFen = adapter.getFenAttribute && adapter.getFenAttribute();
+      log('fen attribute:', attrFen || '(none)');
+      const moves = adapter.getMoveList();
+      log(`move list (${moves.length} moves):`, moves.slice(0, 12).join(' '), moves.length > 12 ? '...' : '');
+      const grid = adapter.readPieceGrid && adapter.readPieceGrid();
+      if (grid) {
+        const visual = grid.map(r => r.map(c => c || '.').join('')).join('/');
+        log('piece grid:', visual);
+      } else {
+        log('piece grid: (none)');
+      }
+      log('current lastFen:', lastFen || '(none)');
+      log('=== end diagnostic dump ===');
+    } catch (e) {
+      error('diagnostic dump failed:', e);
+    }
+  }, 1500);
 
   // Live settings updates
   subscribe(async (next) => {
