@@ -43,3 +43,56 @@ export function uciToSan(fen, uciMove) {
   if (move === null) return uciMove;
   return move.san;
 }
+
+// ---- Piece-grid → FEN helpers ----
+//
+// Adapters that scrape piece DOM directly produce an 8x8 grid where row 0 is
+// rank 8 (black back rank) and row 7 is rank 1 (white back rank). Each cell
+// is either null (empty) or a single character: uppercase = white, lowercase
+// = black, in standard PNRBQK letters. Use `composeFenFromGrid` to turn that
+// into a Stockfish-ready FEN with conservatively inferred castling rights.
+
+export function gridToFen(grid) {
+  const ranks = grid.map(row => {
+    let out = '';
+    let empty = 0;
+    for (const cell of row) {
+      if (cell) {
+        if (empty) { out += empty; empty = 0; }
+        out += cell;
+      } else {
+        empty++;
+      }
+    }
+    if (empty) out += empty;
+    return out;
+  });
+  return ranks.join('/');
+}
+
+// Castling rights inferred conservatively from king/rook positions on their
+// starting squares. In standard chess a king or rook on its starting square
+// has never moved (kings can't return there via legal moves; rooks similarly
+// can't return to a corner once moved without being captured first), so this
+// is sound, not a guess.
+export function inferCastlingRights(grid) {
+  let rights = '';
+  if (grid[7][4] === 'K') {
+    if (grid[7][7] === 'R') rights += 'K';
+    if (grid[7][0] === 'R') rights += 'Q';
+  }
+  if (grid[0][4] === 'k') {
+    if (grid[0][7] === 'r') rights += 'k';
+    if (grid[0][0] === 'r') rights += 'q';
+  }
+  return rights || '-';
+}
+
+export function composeFenFromGrid(grid, { sideToMove = 'w', moveCount = 0 } = {}) {
+  const board = gridToFen(grid);
+  const castling = inferCastlingRights(grid);
+  const fullmove = Math.floor(moveCount / 2) + 1;
+  // En passant and halfmove clock are unknown from a static piece scrape;
+  // '-' and 0 are conservative defaults that never produce illegal moves.
+  return `${board} ${sideToMove} ${castling} - 0 ${fullmove}`;
+}

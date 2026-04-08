@@ -1,6 +1,10 @@
 // Real content-script logic. Loaded as an ES module via dynamic import from
 // content/content.js. Wires the site adapter, watcher, engine bridge, and
 // overlay together.
+//
+// Diagnostic logging: every interesting event is logged with a
+// `[chess-assistant]` prefix to the page console (DevTools → Console). When
+// users report issues, the console output identifies which layer broke.
 
 import { loadSettings, saveSettings, subscribe } from './settings.js';
 import { createWatcher } from './board-watcher.js';
@@ -10,26 +14,101 @@ import { createPanel } from './overlay/panel.js';
 import { uciToSan } from './fen-replay.js';
 import { installHotkey } from './hotkeys.js';
 
+const TAG = '[chess-assistant]';
+const log = (...a) => console.log(TAG, ...a);
+const warn = (...a) => console.warn(TAG, ...a);
+const error = (...a) => console.error(TAG, ...a);
+
+// Spawning a Stockfish Worker from a chrome-extension:// URL inside a content
+// script is blocked by the host page's CSP `worker-src` directive on both
+// chess.com and lichess. Workaround: fetch the engine loader as text, embed
+// it inside a same-origin Blob with a `Module.locateFile` override that
+// resolves the wasm and nnue back to chrome-extension://, and spawn a Worker
+// from the Blob URL. The Blob inherits the page origin so it satisfies
+// `worker-src 'self'`, and the embedded loader's runtime fetches resolve
+// against the extension URL via locateFile.
+async function createEngineWorker() {
+  const enginePrefix = browser.runtime.getURL('engine/');
+  const engineUrl = browser.runtime.getURL('engine/stockfish-nnue-16-single.js');
+
+  // Try direct first — modern Chrome may allow it via the WAR carve-out, and
+  // Firefox usually does. If it throws (CSP block), fall back to blob.
+  try {
+    const direct = new Worker(engineUrl);
+    log('engine worker spawned via direct chrome-extension URL');
+    return direct;
+  } catch (e) {
+    warn('direct worker failed, falling back to blob bootstrap:', e.message);
+  }
+
+  const resp = await fetch(engineUrl);
+  if (!resp.ok) throw new Error(`fetch stockfish loader failed: ${resp.status}`);
+  const scriptText = await resp.text();
+  const bootstrap =
+    `var Module = (typeof Module === 'undefined' ? {} : Module);\n` +
+    `Module.locateFile = function(p) { return ${JSON.stringify(enginePrefix)} + p; };\n` +
+    scriptText;
+  const blob = new Blob([bootstrap], { type: 'application/javascript' });
+  const blobUrl = URL.createObjectURL(blob);
+  log('engine worker spawned via blob bootstrap:', blobUrl);
+  return new Worker(blobUrl);
+}
+
 export async function run() {
+  log('bootstrap starting on', location.host);
+
   const host = location.host;
   let adapterModule;
   if (host.endsWith('chess.com')) {
+    log('loading chess.com adapter');
     adapterModule = await import(browser.runtime.getURL('content/adapters/chesscom.js'));
   } else if (host.endsWith('lichess.org')) {
+    log('loading lichess adapter');
     adapterModule = await import(browser.runtime.getURL('content/adapters/lichess.js'));
   } else {
+    log('host not supported, exiting:', host);
     return;
   }
 
   let settings = await loadSettings();
-  if (!settings.enabled) return;
-  if (host.endsWith('chess.com') && !settings.sites.chesscom) return;
-  if (host.endsWith('lichess.org') && !settings.sites.lichess) return;
+  log('settings loaded:', JSON.stringify({
+    enabled: settings.enabled,
+    sites: settings.sites,
+    elo: settings.engine.elo,
+    mode: settings.engine.mode,
+    trigger: settings.trigger
+  }));
+
+  if (!settings.enabled) { log('extension disabled in popup, exiting'); return; }
+  if (host.endsWith('chess.com') && !settings.sites.chesscom) {
+    log('chess.com disabled in popup, exiting');
+    return;
+  }
+  if (host.endsWith('lichess.org') && !settings.sites.lichess) {
+    log('lichess disabled in popup, exiting');
+    return;
+  }
 
   // Spin up the engine worker
-  const worker = new Worker(browser.runtime.getURL('engine/stockfish-nnue-16-single.js'));
+  let worker;
+  try {
+    worker = await createEngineWorker();
+  } catch (e) {
+    error('failed to create engine worker:', e);
+    return;
+  }
+  worker.onerror = (e) => error('engine worker error:', e.message || e);
+
   const bridge = createEngineBridge(worker);
-  await bridge.ready();
+  log('engine bridge created, waiting for ready');
+  try {
+    await bridge.ready();
+    log('engine ready');
+  } catch (e) {
+    error('engine never became ready:', e);
+    return;
+  }
+
   await bridge.setOptions({
     elo: settings.engine.elo,
     limitStrength: settings.engine.limitStrength,
@@ -43,7 +122,7 @@ export async function run() {
     initialPosition: settings.panelPosition,
     onPositionChange: pos => {
       saveSettings({ panelPosition: pos }).catch(e =>
-        console.error('[chess-assistant] failed to persist panel position:', e));
+        error('failed to persist panel position:', e));
     }
   });
   panel.setDisplay({
@@ -53,14 +132,24 @@ export async function run() {
   if (!settings.display.panel) panel.hide();
 
   const adapter = adapterModule.createAdapter(document);
+  log('adapter ready, board element initially:', !!adapter.getBoardElement());
 
   let lastFen = null;
   let lastSideToMove = 'white';
+  let lastOrientation = 'white';
 
   async function analyzePosition(fen, sideToMove, orientation) {
+    // Re-query the board on every analyze so SPA-driven element replacement
+    // (e.g. chess.com new-game transitions) doesn't leave us drawing onto a
+    // detached node.
     const board = adapter.getBoardElement();
-    if (board) arrow.setBoard(board);
+    if (board) {
+      arrow.setBoard(board);
+    } else {
+      warn('board element vanished mid-analyze; arrow will be invisible');
+    }
 
+    log('analyzing:', fen);
     try {
       await bridge.analyze(
         fen,
@@ -104,23 +193,29 @@ export async function run() {
     return false; // hotkey-only
   }
 
-  createWatcher(adapter, ({ fen, sideToMove, orientation }) => {
+  createWatcher(adapter, ({ fen, sideToMove, orientation, source }) => {
+    log(`position changed (source=${source}, side=${sideToMove}, orient=${orientation})`);
     lastFen = fen;
     lastSideToMove = sideToMove;
+    lastOrientation = orientation;
     bridge.stop();
     arrow.clear();
     if (shouldAnalyze(sideToMove, orientation)) {
       analyzePosition(fen, sideToMove, orientation);
+    } else {
+      log(`skipping analyze due to trigger=${settings.trigger}`);
     }
   });
 
   // Hotkey: re-analyze on demand
   installHotkey(() => settings.hotkey, () => {
-    if (lastFen) analyzePosition(lastFen, lastSideToMove, adapter.getOrientation());
+    log('hotkey pressed');
+    if (lastFen) analyzePosition(lastFen, lastSideToMove, lastOrientation);
   });
 
   // Live settings updates
   subscribe(async (next) => {
+    log('settings updated');
     settings = next;
     await bridge.setOptions({
       elo: settings.engine.elo,
@@ -133,4 +228,6 @@ export async function run() {
     if (!settings.display.panel) panel.hide(); else panel.show();
     if (!settings.display.arrow) arrow.clear();
   });
+
+  log('bootstrap complete');
 }
