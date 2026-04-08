@@ -49,6 +49,7 @@
         "engine/stockfish-nnue-16-single.js",
         "engine/stockfish-nnue-16-single.wasm",
         "engine/nn-5af11540bbfe.nnue",
+        "content/main.js",
         "content/adapters/chesscom.js",
         "content/adapters/lichess.js",
         "content/board-watcher.js",

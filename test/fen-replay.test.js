@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { Chess } from 'chess.js';
+// fen-replay reads chess.js from globalThis at use-time. Seed it before
+// any sansToFen / uciToSan call so the lazy ensureChess() succeeds.
+globalThis.Chess = Chess;
 import { sansToFen, STARTING_FEN } from '../content/fen-replay.js';
 
 test('empty move list returns starting position', () => {

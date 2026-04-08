@@ -7,6 +7,22 @@ export function createPanel({ initialPosition, onPositionChange }) {
   let header = null;
   let body = null;
   let dragOffset = null;
+  let showEvalBar = true;
+  let showPvLines = true;
+
+  function applyDisplay() {
+    if (!panel) return;
+    const evalBar = panel.querySelector('.sf-overlay-evalbar');
+    if (evalBar) evalBar.style.display = showEvalBar ? '' : 'none';
+    const pvList = panel.querySelector('.sf-overlay-pvlist');
+    if (pvList) pvList.style.display = showPvLines ? '' : 'none';
+  }
+
+  function setDisplay({ evalBar, pvLines }) {
+    if (typeof evalBar === 'boolean') showEvalBar = evalBar;
+    if (typeof pvLines === 'boolean') showPvLines = pvLines;
+    applyDisplay();
+  }
 
   function ensurePanel() {
     if (panel) return;
@@ -33,6 +49,7 @@ export function createPanel({ initialPosition, onPositionChange }) {
     document.body.appendChild(panel);
 
     header.addEventListener('mousedown', startDrag);
+    applyDisplay();
   }
 
   function startDrag(e) {
@@ -111,11 +128,11 @@ export function createPanel({ initialPosition, onPositionChange }) {
     f.textContent = footer || '';
   }
 
-  function show() { ensurePanel(); panel.style.display = ''; }
+  function show() { ensurePanel(); panel.style.display = 'block'; }
   function hide() { if (panel) panel.style.display = 'none'; }
   function destroy() {
     if (panel) { panel.remove(); panel = null; }
   }
 
-  return { update, show, hide, destroy };
+  return { update, show, hide, destroy, setDisplay };
 }

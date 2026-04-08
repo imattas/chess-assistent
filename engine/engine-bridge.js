@@ -1,12 +1,20 @@
 // UCI bridge over a Worker. The Worker is injected so this module is
 // trivially testable with a FakeWorker.
+//
+// Race-safe analyze flow: only one search is active at a time. If the caller
+// requests a new analyze() while one is in flight, we send `stop` and queue
+// the new search. The previous search's `bestmove` line still arrives (UCI
+// guarantees one bestmove per `go`); when it arrives we resolve the active
+// promise and immediately start the queued search. Info lines for the
+// previous search are silently dropped via a per-search id check.
 
 export function createEngineBridge(worker) {
   let readyResolve;
   const readyPromise = new Promise(r => { readyResolve = r; });
-  let currentInfoListener = null;
-  let currentBestmoveResolve = null;
-  let currentBestmoveReject = null;
+
+  let nextSearchId = 1;
+  let activeSearch = null;   // { id, fen, opts, onInfo, resolve, reject }
+  let pendingSearch = null;  // { id, fen, opts, onInfo, resolve, reject }
 
   function send(line) {
     worker.postMessage(line);
@@ -32,6 +40,15 @@ export function createEngineBridge(worker) {
     return info;
   }
 
+  function startSearch(search) {
+    send(`position fen ${search.fen}`);
+    if (search.opts.mode === 'depth') {
+      send(`go depth ${search.opts.value}`);
+    } else {
+      send(`go movetime ${search.opts.value}`);
+    }
+  }
+
   worker.onmessage = (ev) => {
     const text = typeof ev.data === 'string' ? ev.data : String(ev.data);
     for (const line of text.split('\n')) {
@@ -42,18 +59,19 @@ export function createEngineBridge(worker) {
       } else if (trimmed === 'readyok') {
         if (readyResolve) { readyResolve(); readyResolve = null; }
       } else if (trimmed.startsWith('info ') && trimmed.includes(' pv ')) {
-        if (currentInfoListener) {
-          currentInfoListener(parseInfoLine(trimmed));
+        if (activeSearch) {
+          activeSearch.onInfo(parseInfoLine(trimmed));
         }
       } else if (trimmed.startsWith('bestmove ')) {
         const parts = trimmed.split(' ');
-        const bestmove = parts[1];
-        const ponder = parts[3];
-        if (currentBestmoveResolve) {
-          currentBestmoveResolve({ bestmove, ponder });
-          currentBestmoveResolve = null;
-          currentBestmoveReject = null;
-          currentInfoListener = null;
+        const result = { bestmove: parts[1], ponder: parts[3] };
+        const finished = activeSearch;
+        activeSearch = null;
+        if (finished) finished.resolve(result);
+        if (pendingSearch) {
+          activeSearch = pendingSearch;
+          pendingSearch = null;
+          startSearch(activeSearch);
         }
       }
     }
@@ -82,32 +100,40 @@ export function createEngineBridge(worker) {
   }
 
   function analyze(fen, { mode, value }, onInfo) {
-    // Cancel any previous search
-    if (currentBestmoveReject) {
-      currentBestmoveReject(new Error('superseded'));
-      currentBestmoveResolve = null;
-      currentBestmoveReject = null;
-      send('stop');
-    }
-    currentInfoListener = onInfo || (() => {});
-    const promise = new Promise((resolve, reject) => {
-      currentBestmoveResolve = resolve;
-      currentBestmoveReject = reject;
+    return new Promise((resolve, reject) => {
+      const search = {
+        id: nextSearchId++,
+        fen,
+        opts: { mode, value },
+        onInfo: onInfo || (() => {}),
+        resolve,
+        reject
+      };
+      if (activeSearch) {
+        // Bump any earlier pending — the latest call wins.
+        if (pendingSearch) pendingSearch.reject(new Error('superseded'));
+        pendingSearch = search;
+        send('stop');
+      } else {
+        activeSearch = search;
+        startSearch(search);
+      }
     });
-    send(`position fen ${fen}`);
-    if (mode === 'depth') {
-      send(`go depth ${value}`);
-    } else {
-      send(`go movetime ${value}`);
-    }
-    return promise;
   }
 
   function stop() {
+    // Drop any pending and ask the engine to stop. Always sending `stop` is
+    // harmless to Stockfish when nothing is searching.
+    if (pendingSearch) {
+      pendingSearch.reject(new Error('stopped'));
+      pendingSearch = null;
+    }
     send('stop');
   }
 
   function destroy() {
+    if (pendingSearch) { pendingSearch.reject(new Error('destroyed')); pendingSearch = null; }
+    if (activeSearch) { activeSearch.reject(new Error('destroyed')); activeSearch = null; }
     try { worker.terminate(); } catch {}
   }
 
