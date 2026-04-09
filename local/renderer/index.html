@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chess Assistant — Local</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon">&#9822;</span>
+        <span class="brand-name">Chess Assistant</span>
+      </div>
+      <nav class="site-tabs" id="site-tabs">
+        <button data-site="lichess"    data-url="https://lichess.org/" class="active">Lichess</button>
+        <button data-site="chesscom"   data-url="https://www.chess.com/">Chess.com</button>
+        <button data-site="chess24"    data-url="https://chess24.com/">Chess24</button>
+        <button data-site="chesstempo" data-url="https://chesstempo.com/">Chesstempo</button>
+      </nav>
+      <div class="status" id="status">Starting engine…</div>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <div class="webview-host" id="webview-host">
+        <!-- <webview> element is created dynamically by app.js so we can set
+             an absolute file:// preload path. -->
+      </div>
+
+      <aside class="sidebar" id="sidebar">
+        <section class="sidebar-section">
+          <h2>Engine</h2>
+          <div class="eval-bar">
+            <div class="eval-fill" id="eval-fill"></div>
+          </div>
+          <div class="best-move" id="best-move">&mdash;</div>
+          <div class="meta" id="meta">depth &mdash; &middot; &mdash; kn/s</div>
+          <div class="eval-value" id="eval-value">&mdash;</div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2>PV</h2>
+          <div class="pv-list" id="pv-list">
+            <div class="pv-empty">Make a move to see the engine's analysis.</div>
+          </div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2>Engine settings</h2>
+          <label class="row">
+            <span>ELO <span id="elo-value">2400</span></span>
+            <input type="range" id="elo" min="1320" max="3190" step="10" value="2400">
+          </label>
+          <label class="row check">
+            <input type="checkbox" id="unlimited"> <span>Unlimited strength</span>
+          </label>
+          <div class="row segmented">
+            <label><input type="radio" name="mode" value="time" checked> Time</label>
+            <label><input type="radio" name="mode" value="depth"> Depth</label>
+          </div>
+          <label class="row" id="time-row">
+            <span>Time per move <span id="time-value">1000</span> ms</span>
+            <input type="range" id="time" min="100" max="10000" step="100" value="1000">
+          </label>
+          <label class="row" id="depth-row" style="display:none;">
+            <span>Depth <span id="depth-value">18</span></span>
+            <input type="range" id="depth" min="5" max="30" step="1" value="18">
+          </label>
+          <label class="row">
+            <span>Threads <span id="threads-value">4</span></span>
+            <input type="range" id="threads" min="1" max="16" step="1" value="4">
+          </label>
+          <label class="row">
+            <span>Hash <span id="hash-value">256</span> MB</span>
+            <input type="range" id="hash" min="16" max="4096" step="16" value="256">
+          </label>
+          <label class="row">
+            <span>MultiPV <span id="multipv-value">1</span></span>
+            <input type="range" id="multipv" min="1" max="5" step="1" value="1">
+          </label>
+        </section>
+
+        <section class="sidebar-section diagnostic" id="diagnostic">
+          <h2>Diagnostic</h2>
+          <div class="diag-row"><span>Stockfish:</span> <span id="diag-binary">starting…</span></div>
+          <div class="diag-row"><span>Last FEN source:</span> <span id="diag-source">—</span></div>
+          <div class="diag-row"><span>Last FEN:</span> <code id="diag-fen">—</code></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
